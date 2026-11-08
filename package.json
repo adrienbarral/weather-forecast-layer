@@ -1,0 +1,31 @@
+{
+  "name": "weather-forecast-layer",
+  "version": "0.1.0",
+  "description": "OpenLayers wind forecasts with pluggable providers and temporal interpolation",
+  "type": "module",
+  "files": ["dist"],
+  "exports": {".": {"types": "./dist/index.d.ts", "import": "./dist/weather-forecast-layer.js"}},
+  "scripts": {
+    "dev": "vite --config vite.demo.config.ts --host 127.0.0.1",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "build": "vite build && tsc -p tsconfig.build.json",
+    "build:demo": "vite build --config vite.demo.config.ts",
+    "test:grib": "node --import tsx tests/check-grib.ts",
+    "test:e2e": "playwright test",
+    "test:package": "tsx tools/check-package.ts"
+  },
+  "engines": {"node": ">=22.12.0"},
+  "peerDependencies": {"ol": "^10.7.0"},
+  "dependencies": {"@azohra/meteo.grib": "^0.1.4"},
+  "devDependencies": {
+    "@playwright/test": "^1.56.0",
+    "@types/node": "^22.0.0",
+    "lucide": "^0.468.0",
+    "ol": "^10.7.0",
+    "tsx": "^4.20.0",
+    "typescript": "^5.9.0",
+    "vite": "^7.1.0",
+    "vitest": "^4.1.12"
+  }
+}

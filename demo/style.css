@@ -1,0 +1,76 @@
+@import 'ol/ol.css';
+
+:root { font-family: 'IBM Plex Sans', sans-serif; color: #202b25; background: #eef1ee; --line: #d5ddd7; --green: #16644c; --muted: #617168; --surface: #fbfcfb; letter-spacing: 0; }
+* { box-sizing: border-box; }
+body { margin: 0; }
+button, input, select { font: inherit; }
+button, select, input[type='checkbox'], input[type='range'] { cursor: pointer; }
+button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid #dc6231; outline-offset: 3px; }
+main { height: 100dvh; min-height: 540px; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; }
+.topbar { display: flex; align-items: center; gap: 28px; padding: 14px 24px; border-bottom: 1px solid var(--line); background: var(--surface); }
+.brand { display: flex; align-items: center; gap: 12px; font-size: 20px; font-weight: 600; margin-right: auto; white-space: nowrap; }
+.brand-mark { display: grid; place-items: center; width: 36px; height: 36px; background: var(--green); color: white; font-family: 'IBM Plex Mono', monospace; font-size: 21px; }
+.subtitle { display: block; font-size: 12px; font-weight: 400; color: var(--muted); margin-top: 1px; }
+label, .label { display: block; font-size: 12px; font-weight: 500; color: var(--muted); }
+select { margin-top: 4px; background: transparent; border: 0; border-bottom: 1px solid var(--line); font-size: 14px; padding: 2px 28px 4px 0; max-width: 100%; color: inherit; }
+.model-control strong { display: block; margin-top: 4px; font-size: 14px; font-weight: 500; }
+.run-control output { display: block; margin-top: 5px; font-family: 'IBM Plex Mono', monospace; font-size: 12px; }
+.icon-button { height: 36px; width: 36px; display: grid; place-items: center; flex-shrink: 0; padding: 8px; background: transparent; color: var(--green); border: 1px solid var(--line); border-radius: 4px; }
+.icon-button:hover { background: #e5ede7; }
+.icon-button:disabled { color: #a5ada8; cursor: default; background: transparent; }
+.icon-button svg { width: 18px; height: 18px; }
+.workspace { display: grid; grid-template-columns: minmax(0, 1fr) 250px; min-height: 0; }
+#map { position: relative; min-width: 0; min-height: 0; background: #e3e9e5; }
+#map-status { position: absolute; left: 50%; top: 18px; transform: translateX(-50%); z-index: 2; background: rgba(251,252,251,.96); border: 1px solid var(--line); padding: 9px 14px; font-size: 12px; max-width: calc(100% - 100px); text-align: center; }
+#map-status[data-status='ready'] { display: none; }
+#map-status[data-status='error'] { color: #a33220; border-color: #e2b7a9; }
+aside { border-left: 1px solid var(--line); background: var(--surface); padding: 0 20px; overflow-y: auto; }
+aside section { padding: 22px 0; border-bottom: 1px solid var(--line); }
+aside section:last-child { border-bottom: 0; }
+h2 { font-size: 13px; font-weight: 600; margin: 0 0 18px; }
+h2 span { float: right; font-weight: 400; color: var(--muted); font-size: 12px; }
+.check { display: flex; gap: 9px; align-items: center; color: #26382d; font-size: 14px; margin: 13px 0; }
+input[type='checkbox'] { width: 16px; height: 16px; accent-color: var(--green); margin: 0; }
+.settings label[for='opacity'] { margin-top: 24px; }
+#opacity-value { float: right; font-family: 'IBM Plex Mono', monospace; }
+input[type='range'] { accent-color: var(--green); width: 100%; height: 24px; margin: 8px 0 0; }
+#legend { width: 100%; height: 14px; display: block; }
+.legend-ticks { display: flex; justify-content: space-between; font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: var(--muted); margin-top: 8px; }
+#coordinates { display: block; font: 11px 'IBM Plex Mono', monospace; color: var(--muted); }
+.reading-value { display: flex; align-items: baseline; gap: 8px; margin: 10px 0 14px; }
+#speed { font: 36px 'IBM Plex Mono', monospace; }
+.reading-value span, .direction { color: var(--muted); font-size: 12px; }
+#direction { float: right; color: #202b25; font-family: 'IBM Plex Mono', monospace; }
+.provenance output { display: block; font-size: 12px; line-height: 1.7; }
+#source-times { color: var(--muted); font-family: 'IBM Plex Mono', monospace; font-size: 10px; margin-top: 8px; overflow-wrap: anywhere; }
+.timeline { display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 0 28px; padding: 16px 24px 12px; background: var(--surface); border-top: 1px solid var(--line); }
+.time-heading { grid-row: span 2; }
+#time { border: 0; background: transparent; border-bottom: 1px solid var(--line); padding: 7px 0; font-family: 'IBM Plex Mono', monospace; font-size: 13px; width: 100%; color: #202b25; }
+.time-navigation { display: flex; align-items: center; gap: 14px; }
+#timeline { margin: 0; flex: 1; min-width: 0; }
+.time-bounds { display: flex; justify-content: space-between; padding: 6px 50px 0; font: 10px 'IBM Plex Mono', monospace; color: var(--muted); }
+.ol-attribution { max-width: calc(100% - 12px); font-size: 9px; }
+.ol-attribution ul { white-space: normal; }
+.ol-zoom button { background: var(--green); }
+@media (max-width: 760px) {
+  main { min-height: 680px; }
+  .topbar { padding: 12px 14px; gap: 10px; flex-wrap: wrap; }
+  .brand { font-size: 17px; }
+  .brand-mark { width: 30px; height: 30px; font-size: 18px; }
+  .model-control { width: 145px; }
+  .run-control { order: 3; flex: 1; display: flex; gap: 10px; align-items: center; }
+  .run-control output { margin-top: 0; font-size: 10px; }
+  #refresh { order: 4; height: 28px; width: 28px; padding: 5px; }
+  .workspace { grid-template-columns: 1fr; grid-template-rows: minmax(200px, 1fr) auto; }
+  aside { display: grid; grid-template-columns: 1fr 1fr; border-left: 0; border-top: 1px solid var(--line); padding: 0 14px; gap: 18px; max-height: 160px; }
+  aside section { padding: 12px 0; border: 0; }
+  h2 { margin-bottom: 10px; }
+  .settings .check { display: inline-flex; font-size: 12px; margin: 0 6px 5px 0; }
+  .settings label[for='opacity'] { margin-top: 6px; }
+  .reading, .provenance { padding-top: 6px; }
+  .timeline { grid-template-columns: 1fr; padding: 10px 14px; gap: 8px; }
+  .time-heading { grid-row: auto; display: flex; align-items: center; gap: 10px; }
+  .time-heading label { max-width: 95px; }
+  #time { flex: 1; min-width: 0; font-size: 12px; }
+  .time-bounds { padding-top: 0; font-size: 9px; }
+}

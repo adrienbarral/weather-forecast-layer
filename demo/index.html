@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Wind Forecast</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <main>
+      <header class="topbar">
+        <div class="brand">
+          <span class="brand-mark">W</span>
+          <div>Wind Forecast<span class="subtitle">Vent à 10 mètres</span></div>
+        </div>
+        <div class="model-control">
+          <span class="label">Source météo</span>
+          <strong>NOAA · GFS</strong>
+        </div>
+        <div class="run-control">
+          <span class="label">Cycle du modèle · UTC</span
+          ><output id="run">--</output>
+        </div>
+        <button
+          id="refresh"
+          class="icon-button"
+          title="Actualiser le cycle du modèle"
+          aria-label="Actualiser le cycle du modèle"
+        >
+          <i data-lucide="refresh-cw"></i>
+        </button>
+      </header>
+      <div class="workspace">
+        <section id="map" aria-label="Carte mondiale du vent">
+          <div id="map-status" role="status" data-status="loading">
+            Chargement des prévisions
+          </div>
+        </section>
+        <aside>
+          <section class="settings">
+            <h2>Affichage</h2>
+            <label class="check"
+              ><input id="texture" type="checkbox" checked /> Vitesse du
+              vent</label
+            ><label class="check"
+              ><input id="barbs" type="checkbox" checked /> Barbules</label
+            ><label for="opacity"
+              >Opacité <output id="opacity-value">65 %</output></label
+            ><input id="opacity" type="range" min="0" max="100" value="65" />
+          </section>
+          <section class="legend">
+            <h2>Vitesse <span>nœuds</span></h2>
+            <canvas
+              id="legend"
+              width="240"
+              height="16"
+              aria-label="Échelle jet de 0 à 60 nœuds"
+            ></canvas>
+            <div class="legend-ticks">
+              <span>0</span><span>15</span><span>30</span><span>45</span
+              ><span>60</span>
+            </div>
+          </section>
+          <section class="reading">
+            <h2>Point sélectionné</h2>
+            <output id="coordinates">--</output>
+            <div class="reading-value">
+              <output id="speed">--</output><span>nœuds</span>
+            </div>
+            <div class="direction">
+              Provenance <output id="direction">--</output>
+            </div>
+          </section>
+          <section class="provenance">
+            <h2>Prévision</h2>
+            <output id="forecast-status">En attente</output
+            ><output id="source-times">--</output>
+          </section>
+        </aside>
+      </div>
+      <footer class="timeline">
+        <div class="time-heading">
+          <label for="time">Date de prévision · UTC</label
+          ><input id="time" type="datetime-local" step="60" />
+        </div>
+        <div class="time-navigation">
+          <button
+            id="previous"
+            class="icon-button"
+            title="Échéance précédente"
+            aria-label="Échéance précédente"
+          >
+            <i data-lucide="chevron-left"></i></button
+          ><input
+            id="timeline"
+            type="range"
+            min="0"
+            max="1"
+            value="0"
+            step="1"
+            aria-label="Date de prévision"
+          /><button
+            id="next"
+            class="icon-button"
+            title="Échéance suivante"
+            aria-label="Échéance suivante"
+          >
+            <i data-lucide="chevron-right"></i>
+          </button>
+        </div>
+        <div class="time-bounds">
+          <output id="start">--</output><output id="end">--</output>
+        </div>
+      </footer>
+    </main>
+    <script type="module" src="/main.ts"></script>
+  </body>
+</html>
