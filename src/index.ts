@@ -4,3 +4,5 @@ export { OfficialGribProvider } from './providers/OfficialGribProvider.js';
 export { jet } from './render/wind.js';
 export { WindLayer } from './layer/WindLayer.js';
 export type { WindLayerOptions, WindLayerState } from './layer/WindLayer.js';
+export { TrajectoryExtrapolationLayer } from './layer/TrajectoryExtrapolationLayer.js';
+export type { TrajectoryExtrapolationLayerOptions } from './layer/TrajectoryExtrapolationLayer.js';

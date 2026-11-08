@@ -61,6 +61,24 @@ test('NOAA GRIB layer, temporal interpolation and controls', async ({ page }, te
   });
   expect(sample.eastward).toBeCloseTo(20);
   expect(sample.northward).toBeCloseTo(-5);
+  await expect(page.locator('#trajectory-speed')).toHaveText('--');
+  await page.getByRole('button', { name: 'Tracer une trajectoire' }).click();
+  const drawPixels = await page.evaluate(async () => {
+    const path = document.querySelector<HTMLScriptElement>('script[src*="/main.ts"]')!.src;
+    const { map } = await import(path);
+    const [width, height] = map.getSize();
+    return [[width * 0.3, height * 0.42], [width * 0.45, height * 0.48], [width * 0.6, height * 0.45]];
+  });
+  await page.mouse.click(drawPixels[0][0], drawPixels[0][1]);
+  await page.mouse.click(drawPixels[1][0], drawPixels[1][1]);
+  await page.mouse.dblclick(drawPixels[2][0], drawPixels[2][1]);
+  await expect(page.getByRole('button', { name: 'Effacer la trajectoire' })).toBeVisible();
+  const initialTrajectoryPosition = await page.evaluate(async () => {
+    const path = document.querySelector<HTMLScriptElement>('script[src*="/main.ts"]')!.src;
+    const { trajectory, wind } = await import(path);
+    return { time: trajectory.getTime().getTime(), forecastTime: wind.getTime().getTime(), position: trajectory.getCurrentPosition() };
+  });
+  expect(initialTrajectoryPosition.time).toBe(initialTrajectoryPosition.forecastTime);
 
   const lifecycle = await page.evaluate(async () => {
     const path = document.querySelector<HTMLScriptElement>('script[src*="/main.ts"]')!.src;
@@ -95,6 +113,24 @@ test('NOAA GRIB layer, temporal interpolation and controls', async ({ page }, te
   await page.locator('#time').fill('2026-11-07T02:00');
   await page.locator('#time').dispatchEvent('change');
   await expect(page.locator('#map-status')).toHaveAttribute('data-status', 'ready');
+  const movedTrajectoryPosition = await page.evaluate(async () => {
+    const path = document.querySelector<HTMLScriptElement>('script[src*="/main.ts"]')!.src;
+    const { trajectory, wind } = await import(path);
+    return { time: trajectory.getTime().getTime(), forecastTime: wind.getTime().getTime(), position: trajectory.getCurrentPosition() };
+  });
+  expect(movedTrajectoryPosition.time).toBe(movedTrajectoryPosition.forecastTime);
+  expect(movedTrajectoryPosition.position).not.toEqual(initialTrajectoryPosition.position);
+  const [startLongitude, startLatitude] = initialTrajectoryPosition.position;
+  const [endLongitude, endLatitude] = movedTrajectoryPosition.position;
+  const latitudeDelta = (endLatitude - startLatitude) * Math.PI / 180;
+  const longitudeDelta = (endLongitude - startLongitude) * Math.PI / 180;
+  const haversine = Math.sin(latitudeDelta / 2) ** 2 + Math.cos(startLatitude * Math.PI / 180) * Math.cos(endLatitude * Math.PI / 180) * Math.sin(longitudeDelta / 2) ** 2;
+  const travelledMeters = 6 / 1.9438444924406 * 1800;
+  expect(2 * 6_371_008.8 * Math.asin(Math.sqrt(haversine))).toBeCloseTo(travelledMeters, -1);
+  await expect(page.locator('#trajectory-speed')).not.toHaveText('--');
+  await expect(page.locator('#trajectory-direction')).not.toHaveText('--');
+  await page.getByRole('button', { name: 'Effacer la trajectoire' }).click();
+  await expect(page.locator('#trajectory-speed')).toHaveText('--');
   await page.locator('#barbs').uncheck();
   await page.locator('#barbs').check();
   await page.getByRole('button', { name: 'Échéance suivante' }).click();

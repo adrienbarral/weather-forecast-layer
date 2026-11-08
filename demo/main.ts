@@ -2,9 +2,15 @@ import Map from 'ol/Map.js';
 import View from 'ol/View.js';
 import TileLayer from 'ol/layer/Tile.js';
 import OSM from 'ol/source/OSM.js';
+import Draw from 'ol/interaction/Draw.js';
+import LineString from 'ol/geom/LineString.js';
+import VectorLayer from 'ol/layer/Vector.js';
+import VectorSource from 'ol/source/Vector.js';
+import Style from 'ol/style/Style.js';
+import Stroke from 'ol/style/Stroke.js';
 import { fromLonLat, toLonLat } from 'ol/proj.js';
-import { createIcons, ChevronLeft, ChevronRight, RefreshCw } from 'lucide';
-import { OfficialGribProvider, WindLayer, jet, KNOTS_PER_MS, type WindLayerState } from '../src/index';
+import { createIcons, ChevronLeft, ChevronRight, RefreshCw, Route, Trash2, X } from 'lucide';
+import { OfficialGribProvider, TrajectoryExtrapolationLayer, WindLayer, jet, KNOTS_PER_MS, type WindLayerState } from '../src/index';
 import './style.css';
 
 const element = <ElementType extends HTMLElement>(id: string) => document.getElementById(id) as ElementType;
@@ -13,10 +19,18 @@ const timeline = element<HTMLInputElement>('timeline');
 const previous = element<HTMLButtonElement>('previous');
 const next = element<HTMLButtonElement>('next');
 const refresh = element<HTMLButtonElement>('refresh');
+const drawTrajectoryButton = element<HTMLButtonElement>('trajectory-draw');
+const cancelTrajectoryButton = element<HTMLButtonElement>('trajectory-cancel');
+const removeTrajectoryButton = element<HTMLButtonElement>('trajectory-remove');
 const status = element<HTMLDivElement>('map-status');
 const map = new Map({ target: 'map', layers: [new TileLayer({ source: new OSM() })], view: new View({ center: fromLonLat([-5, 46]), zoom: 3 }) });
-const wind = new WindLayer({ provider: new OfficialGribProvider(), time: new Date(Math.floor(Date.now() / 60_000) * 60_000) });
-createIcons({ icons: { ChevronLeft, ChevronRight, RefreshCw } });
+const currentTime = new Date(Math.floor(Date.now() / 60_000) * 60_000);
+const wind = new WindLayer({ provider: new OfficialGribProvider(), time: currentTime });
+const trajectorySpeed = 6 / KNOTS_PER_MS;
+let trajectory: TrajectoryExtrapolationLayer | undefined;
+let drawInteraction: Draw | undefined;
+let drawLayer: VectorLayer<VectorSource> | undefined;
+createIcons({ icons: { ChevronLeft, ChevronRight, RefreshCw, Route, Trash2, X } });
 
 const formatDate = (time: number) => new Intl.DateTimeFormat('fr-FR', { timeZone: 'UTC', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }).format(time);
 let selected: number[] | undefined;
@@ -29,7 +43,73 @@ function updateReading(): void {
   element('direction').textContent = sample ? sample.direction === null ? 'Calme' : `${Math.round(sample.direction)}°` : '--';
 }
 
+function updateTrajectoryReading(state = wind.getWindState()): void {
+  const reading = element<HTMLDivElement>('trajectory-reading');
+  if (!trajectory) {
+    reading.dataset.state = 'empty';
+    element('trajectory-speed').textContent = '--';
+    element('trajectory-direction').textContent = '--';
+    element('trajectory-position').textContent = '--';
+    return;
+  }
+  trajectory.setTime(new Date(state.time));
+  const [longitude, latitude] = trajectory.getCurrentPosition();
+  element('trajectory-position').textContent = `${latitude.toFixed(2)}°, ${longitude.toFixed(2)}°`;
+  if (state.status !== 'ready') {
+    reading.dataset.state = state.status;
+    element('trajectory-speed').textContent = '--';
+    element('trajectory-direction').textContent = state.status === 'error' ? 'Indisponible' : 'Chargement';
+    return;
+  }
+  const sample = wind.sample(longitude, latitude);
+  reading.dataset.state = sample ? 'ready' : 'outside';
+  element('trajectory-speed').textContent = sample ? (sample.speed * KNOTS_PER_MS).toFixed(1) : '--';
+  element('trajectory-direction').textContent = sample ? sample.direction === null ? 'Calme' : `${Math.round(sample.direction)}°` : '--';
+}
+
+function stopDrawing(): void {
+  if (drawInteraction) map.removeInteraction(drawInteraction);
+  if (drawLayer) map.removeLayer(drawLayer);
+  drawInteraction = undefined;
+  drawLayer = undefined;
+  cancelTrajectoryButton.hidden = true;
+  drawTrajectoryButton.disabled = false;
+}
+
+function beginDrawing(): void {
+  const source = new VectorSource();
+  drawLayer = new VectorLayer({ source, style: new Style({ stroke: new Stroke({ color: '#dc6231', width: 3, lineDash: [8, 5] }) }) });
+  map.addLayer(drawLayer);
+  drawInteraction = new Draw({ source, type: 'LineString', minPoints: 2 });
+  drawInteraction.on('drawend', event => {
+    const geometry = event.feature.getGeometry();
+    if (!(geometry instanceof LineString) || geometry.getCoordinates().length < 2) return;
+    const coordinates = geometry.getCoordinates();
+    const trajectoryCoordinates = coordinates.map(coordinate => toLonLat(coordinate, map.getView().getProjection()));
+    stopDrawing();
+    try {
+      const nextTrajectory = new TrajectoryExtrapolationLayer({
+        trajectory: trajectoryCoordinates,
+        speed: trajectorySpeed,
+        currentPosition: trajectoryCoordinates[0],
+        time: wind.getTime(),
+      });
+      trajectory?.dispose();
+      nextTrajectory.attach(map);
+      trajectory = nextTrajectory;
+      removeTrajectoryButton.hidden = false;
+      updateTrajectoryReading();
+    } catch (error) {
+      report(error);
+    }
+  });
+  map.addInteraction(drawInteraction);
+  drawTrajectoryButton.disabled = true;
+  cancelTrajectoryButton.hidden = false;
+}
+
 function update(state: WindLayerState): void {
+  updateTrajectoryReading(state);
   status.dataset.status = state.status;
   status.textContent = state.status === 'error' ? state.error?.message ?? 'Prévision indisponible' : 'Chargement des prévisions';
   date.value = new Date(state.time).toISOString().slice(0, 16);
@@ -62,6 +142,14 @@ async function chooseTime(time: Date): Promise<void> {
   try { await wind.setTime(time); } catch (error) { report(error); }
 }
 wind.subscribe(update);
+drawTrajectoryButton.addEventListener('click', beginDrawing);
+cancelTrajectoryButton.addEventListener('click', stopDrawing);
+removeTrajectoryButton.addEventListener('click', () => {
+  trajectory?.dispose();
+  trajectory = undefined;
+  removeTrajectoryButton.hidden = true;
+  updateTrajectoryReading();
+});
 date.addEventListener('change', () => { void chooseTime(new Date(`${date.value}:00Z`)); });
 timeline.addEventListener('input', () => { void chooseTime(new Date(Number(timeline.value) * 60_000)); });
 previous.addEventListener('click', () => {
@@ -88,5 +176,5 @@ for (let column = 0; column < legend.width; column++) {
   context.fillRect(column, 0, 1, legend.height);
 }
 void wind.attach(map).catch(report);
-window.addEventListener('pagehide', () => { wind.dispose(); map.dispose(); }, { once: true });
-export { map, wind };
+window.addEventListener('pagehide', () => { stopDrawing(); wind.dispose(); trajectory?.dispose(); map.dispose(); }, { once: true });
+export { map, wind, trajectory };

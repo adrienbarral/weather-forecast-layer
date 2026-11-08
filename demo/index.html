@@ -81,6 +81,49 @@
             <output id="forecast-status">En attente</output
             ><output id="source-times">--</output>
           </section>
+          <section class="trajectory-tools">
+            <div class="trajectory-heading">
+              <h2>Trajectoire · 6 nœuds</h2>
+              <button
+                id="trajectory-remove"
+                class="icon-button"
+                title="Effacer la trajectoire"
+                aria-label="Effacer la trajectoire"
+                hidden
+              >
+                <i data-lucide="trash-2"></i>
+              </button>
+            </div>
+            <div class="trajectory-actions">
+              <button
+                id="trajectory-draw"
+                class="command-button"
+                title="Tracer une trajectoire"
+              >
+                <i data-lucide="route"></i><span>Tracer une trajectoire</span>
+              </button>
+              <button
+                id="trajectory-cancel"
+                class="icon-button"
+                title="Annuler le tracé"
+                aria-label="Annuler le tracé"
+                hidden
+              >
+                <i data-lucide="x"></i>
+              </button>
+            </div>
+            <div
+              id="trajectory-reading"
+              class="trajectory-reading"
+              data-state="empty"
+            >
+              <div>
+                <output id="trajectory-speed">--</output><span>nœuds</span>
+              </div>
+              <output id="trajectory-direction">--</output>
+              <output id="trajectory-position">--</output>
+            </div>
+          </section>
         </aside>
       </div>
       <footer class="timeline">

@@ -1,12 +1,12 @@
 # Weather Forecast Layer
 
-Bibliothèque TypeScript pour afficher dans OpenLayers le vent à 10 mètres des prévisions NOAA GFS : texture jet géoréférencée, barbules et navigation temporelle interpolée.
+TypeScript library for displaying NOAA GFS 10-metre wind forecasts in OpenLayers: a georeferenced jet-colour texture, wind barbs, and temporal interpolation.
 
-La bibliothèque télécharge directement les messages GRIB2 nécessaires. Aucun outil d’ingestion, répertoire de données préparées, serveur météo ou compte externe n’est requis.
+The library downloads the required GRIB2 messages directly. No ingestion tool, preprocessed data directory, weather server, or external account is required.
 
-## Démarrage
+## Getting Started
 
-Prérequis : Node 22 LTS >= 22.12, npm et une connexion Internet vers NOAA GFS.
+Requirements: Node 22 LTS >= 22.12, npm, and an Internet connection to NOAA GFS.
 
 ```sh
 nvm use
@@ -14,13 +14,13 @@ npm install
 npm run dev
 ```
 
-Ouvrir http://127.0.0.1:5173. La démo choisit automatiquement le dernier cycle GFS complet et demande les messages du vent de la zone affichée.
+Open http://127.0.0.1:5173. The demo automatically selects the latest complete GFS cycle and requests wind messages for the visible map area.
 
-Le téléchargement se fait en HTTP Range : deux messages U/V par échéance, et uniquement les échéances natives nécessaires. GFS fournit des échéances horaires sur les 72 premières heures. La texture et les barbules utilisent le même champ interpolé.
+Downloads use HTTP Range requests: two U/V messages per forecast time, and only the native forecast times needed. GFS provides hourly steps for the first 72 hours. The texture and wind barbs use the same interpolated field.
 
-## Utilisation
+## Usage
 
-La bibliothèque publie un paquet ESM avec ses déclarations TypeScript. OpenLayers est une `peerDependency` et reste externe au bundle.
+The library ships as an ESM package with TypeScript declarations. OpenLayers is a `peerDependency` and remains external to the bundle.
 
 ```ts
 import Map from 'ol/Map.js';
@@ -28,7 +28,7 @@ import View from 'ol/View.js';
 import TileLayer from 'ol/layer/Tile.js';
 import OSM from 'ol/source/OSM.js';
 import 'ol/ol.css';
-import { OfficialGribProvider, WindLayer } from 'weather-forecast-layer';
+import { OfficialGribProvider, TrajectoryExtrapolationLayer, WindLayer } from 'weather-forecast-layer';
 
 const map = new Map({
   target: 'map',
@@ -45,80 +45,97 @@ const wind = new WindLayer({
   maximumKnots: 60,
   barbSpacing: 60,
 });
+const trajectory = new TrajectoryExtrapolationLayer({
+  trajectory: [[-2, 46], [2, 44], [7, 43]],
+  speed: 12,
+  currentPosition: [-1.5, 45.5],
+  time: wind.getTime(),
+});
 
 wind.subscribe(state => {
   if (state.status === 'error') console.error(state.error);
 });
 
 await wind.attach(map);
+trajectory.attach(map);
 await wind.setTime(new Date('2026-11-07T12:30:00Z'));
+trajectory.setTime(wind.getTime());
 const nativeTimes = wind.getAvailableTimes();
 const reading = wind.sample(-4, 48);
 
 wind.dispose();
+trajectory.dispose();
 ```
 
-La date doit appartenir au cycle GFS chargé. La date de l’exemple décrit l’API ; elle ne constitue pas une prévision permanente.
+The requested time must fall within the loaded GFS cycle. The date in the example illustrates the API; it is not a permanent forecast.
 
-`attach(map)` ajoute le groupe si nécessaire et installe les écouteurs. `detach()` annule les requêtes. `dispose()` libère les sous-couches et le fournisseur. Le fournisseur confirme un seul cycle, sans mélanger des runs. `reloadForecast()` recherche un nouveau cycle.
+## Extrapolated Trajectory
+
+`TrajectoryExtrapolationLayer` takes a polyline and a current position in WGS84 coordinates `[longitude, latitude]`. Speed is in metres per second. Segment lengths are geodesic; WGS84 coordinates are reprojected for display.
+
+On creation, the layer anchors the position at the supplied time or the current time. `setCurrentPosition(position, time)` places the arrow exactly at the given position, even slightly off the trajectory, then anchors the moving object to the nearest point on the path. `setTime(time)` extrapolates the position from that anchor; time can move forward or backward, with motion clamped at either endpoint. `advanceTime(seconds)` shifts simulation time relative to its current value.
+
+In the demo, the `WindLayer` callback passes every selected time to `TrajectoryExtrapolationLayer.setTime()`. Both layers therefore display the same instant.
+
+`attach(map)` adds the group if needed and installs event listeners. `detach()` cancels requests. `dispose()` releases the sublayers and provider. The provider pins one forecast cycle and never mixes runs. `reloadForecast()` looks for a new cycle.
 
 ## Architecture
 
 ```text
-Index NOAA GFS .idx
-    -> sélection stricte de UGRD/VGRD à 10 m
-    -> HTTP Range des deux messages GRIB2
-    -> décodeur GRIB2 TypeScript dans le thread principal
-    -> grille commune U/V en m/s
-    -> interpolation temporelle
+NOAA GFS .idx index
+  -> strict selection of UGRD/VGRD at 10 m
+  -> HTTP Range requests for both GRIB2 messages
+  -> TypeScript GRIB2 decoder on the main thread
+  -> shared U/V grid in m/s
+  -> temporal interpolation
     -> WindLayer (LayerGroup)
-         -> ImageLayer / ImageCanvasSource : texture jet
-         -> VectorLayer : barbules
+         -> ImageLayer / ImageCanvasSource : jet texture
+         -> VectorLayer : wind barbs
 ```
 
-- [src/core/types.ts](src/core/types.ts) définit le contrat du fournisseur et le champ du vent.
-- [src/core/sampling.ts](src/core/sampling.ts) interpole les composantes et calcule vitesse/direction.
-- [src/providers/OfficialGribProvider.ts](src/providers/OfficialGribProvider.ts) découvre les cycles NOAA et charge les champs à la demande.
-- [src/providers/grib](src/providers/grib) valide les messages et décode le vent dans le thread principal.
-- [src/layer/WindLayer.ts](src/layer/WindLayer.ts) assure le cycle de vie, les dates et le rendu OpenLayers.
-- [src/render/wind.ts](src/render/wind.ts) définit la colormap et les symboles de barbules.
-- [demo/main.ts](demo/main.ts) est l’application de démonstration.
+- [src/core/types.ts](src/core/types.ts) defines the provider contract and wind field.
+- [src/core/sampling.ts](src/core/sampling.ts) interpolates wind components and computes speed and direction.
+- [src/providers/OfficialGribProvider.ts](src/providers/OfficialGribProvider.ts) discovers NOAA cycles and loads fields on demand.
+- [src/providers/grib](src/providers/grib) validates GRIB messages and decodes wind on the main thread.
+- [src/layer/WindLayer.ts](src/layer/WindLayer.ts) handles lifecycle, time, and OpenLayers rendering.
+- [src/render/wind.ts](src/render/wind.ts) defines the colour map and wind-barb symbols.
+- [demo/main.ts](demo/main.ts) is the demonstration application.
 
-`OfficialGribProvider` implémente `WindForecastProvider`. Les autres implémentations peuvent fournir leurs propres champs, mais cette version ne lit que NOAA GFS.
+`OfficialGribProvider` implements `WindForecastProvider`. Other implementations can provide their own fields, but this version reads NOAA GFS only.
 
-## Décodage GFS
+## GFS Decoding
 
-Le fournisseur essaie les cycles de six heures récents, jusqu’à trouver un index publié pour l’échéance +72 h. Il épingle ensuite ce cycle. Les index NOAA identifient UGRD et VGRD à 10 m au-dessus du sol ; les niveaux de pression sont rejetés.
+The provider checks recent six-hour cycles until it finds an index published through forecast hour +72. It then pins that cycle. NOAA indexes identify UGRD and VGRD at 10 m above ground; pressure-level fields are rejected.
 
-Chaque requête vérifie HTTP `206`, la taille attendue et les marqueurs GRIB. Le décodeur valide le centre NOAA, le run, l’échéance, le niveau, la projection régulière et le mode de balayage avant de décoder. Aucun GRIB global n’est téléchargé en entier.
+Each request validates the HTTP `206` status, expected response length, and GRIB markers. Before decoding, the parser validates the NOAA centre, run, forecast time, level, regular grid, and scanning mode. The full global GRIB file is never downloaded.
 
-Le parseur TypeScript couvre les messages GFS vérifiés : GRIB2 sur grille globale lat/lon 0,25°, vent 10 m et packing natif accepté par le décodeur. Un packing ou une grille inconnus produit une erreur explicite. L’API NOAA doit autoriser CORS et les requêtes Range ; cela a été vérifié sur les index et messages publics.
+The TypeScript parser supports the verified GFS messages: GRIB2 on a global 0.25° latitude/longitude grid, 10 m wind, and packing supported by the decoder. Unknown packing or grids produce an explicit error. The NOAA API must allow CORS and Range requests; both were verified against its public indexes and messages.
 
-## Interpolation et unités
+## Interpolation and Units
 
-Entre échéances horaires du même cycle GFS, la bibliothèque interpole U et V en m/s selon les horodatages exacts. Elle recalcule ensuite vitesse, direction, couleur et barbules. Elle n’interpole pas les angles ou les couleurs, et n’extrapole pas hors de la plage.
+Between hourly steps in the same GFS cycle, the library interpolates U and V in m/s using their exact timestamps. It then recomputes speed, direction, colour, and wind barbs. It does not interpolate angles or colours, and it does not extrapolate beyond the available time range.
 
-Une échéance exacte ne charge qu’un champ ; un instant intermédiaire charge les deux champs voisins. Le cache des champs est borné. Les réponses périmées sont annulées ou ignorées. Les composantes restent invalides si une valeur manque à l’une des échéances.
+An exact forecast time loads one field; an intermediate time loads its two neighbouring fields. The field cache is bounded. Stale responses are cancelled or ignored. A component remains invalid if its value is missing at either bounding time.
 
-L’interpolation vectorielle lisse l’affichage ; elle ne simule pas une nouvelle prévision. Deux vents opposés peuvent produire un calme intermédiaire.
+Vector interpolation smooths the display; it does not simulate a new forecast. Opposing winds can produce an intermediate calm.
 
-Les composantes suivent la convention U positif vers l’est, V positif vers le nord. La texture utilise une échelle jet fixe de 0 à 60 nœuds, saturée aux bornes. Les barbules s’arrondissent aux 5 nœuds les plus proches ; fanions à 50 nœuds. Leur taille reste constante à l’écran.
+Components use the convention U positive eastward and V positive northward. The texture uses a fixed jet scale from 0 to 60 knots, saturated at the limits. Wind barbs round to the nearest 5 knots, with flags at 50 knots. Their size remains constant on screen.
 
-## Rendu et limites
+## Rendering and Limitations
 
-La texture transforme chaque pixel depuis la projection de la carte vers EPSG:4326 ; elle n’étire pas une image lat/lon sur Mercator. Les vues EPSG:3857 et EPSG:4326, les copies du monde et l’antiméridien sont pris en charge.
+Each texture pixel is transformed from the map projection to EPSG:4326; a latitude/longitude image is not simply stretched over Mercator. EPSG:3857 and EPSG:4326 views, world copies, and the antimeridian are supported.
 
-Le fournisseur rééchantillonne une grille globale 0,25° vers une grille d’affichage plafonnée à 1024 × 1024. La résolution du modèle limite les détails locaux. Mercator ne couvre pas les pôles ; les hautes latitudes nécessitent une vue EPSG:4326.
+The provider resamples the global 0.25° grid to a display grid capped at 1024 × 1024. Model resolution limits local detail. Mercator does not cover the poles; high latitudes require an EPSG:4326 view.
 
-## Données et licence
+## Data and Licensing
 
-Les prévisions GFS sont publiées par [NOAA](https://registry.opendata.aws/noaa-gfs-bdp-pds/) et réutilisables commercialement. L’interface d’attribution crédite NOAA et précise que la NOAA n’approuve pas la bibliothèque.
+GFS forecasts are published by [NOAA](https://registry.opendata.aws/noaa-gfs-bdp-pds/) and can be reused commercially. The attribution credits NOAA and states that NOAA does not endorse this library.
 
-Les données sont gratuites. La bande passante du visiteur est utilisée directement auprès de NOAA. Les limites ou changements d’accès du fournisseur peuvent affecter l’application ; les messages GRIB sont récupérés à chaque besoin et conservés dans un cache mémoire borné, sans stockage permanent.
+The data is free. Visitors' bandwidth is used to retrieve it directly from NOAA. Provider limits or access changes may affect the application; GRIB messages are fetched on demand and held in a bounded in-memory cache, with no persistent storage.
 
-Les fonds OSM sont soumis à leur propre politique d’utilisation ; choisir un service de tuiles adapté au trafic de production.
+OSM basemaps are subject to their own usage policy; choose a tile service suited to production traffic.
 
-## Vérification
+## Verification
 
 ```sh
 npm run typecheck
@@ -131,12 +148,12 @@ npx playwright install chromium
 npm run test:e2e
 ```
 
-`npm run test:grib` télécharge les deux champs GFS de l’échéance +3 h et vérifie leur décodage. Pour tester la démo contre le flux NOAA réel :
+`npm run test:grib` downloads both GFS wind fields at forecast hour +3 and verifies decoding. To test the demo against the live NOAA feed:
 
 ```sh
 WIND_LIVE=1 npm run test:e2e
 ```
 
-Les tests Chromium par défaut vérifient l’interpolation, le rendu, l’antiméridien, le cycle de vie, l’annulation et les contrôles desktop/mobile avec un décodeur simulé.
+The default Chromium tests verify interpolation, rendering, the antimeridian, lifecycle, cancellation, and desktop/mobile controls with a simulated decoder.
 
-Hors de cette version : autres modèles, archives, ensembles, rafales, altitude différente, projections personnalisées et WebGL dédié. Safari/iOS et Firefox n’ont pas encore été certifiés.
+Out of scope for this version: other models, archives, ensembles, gusts, other altitudes, custom projections, and dedicated WebGL rendering. Safari/iOS and Firefox have not been tested.
