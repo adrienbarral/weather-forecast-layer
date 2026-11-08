@@ -6,6 +6,10 @@ export function jet(speed: number, maximum = 60): [number, number, number] {
   return [3, 2, 1].map(center => Math.round(255 * Math.max(0, Math.min(1, 1.5 - Math.abs(4 * normalized - center))))) as [number, number, number];
 }
 
+export function trailOpacity(distanceFromHead: number): number {
+  return 0.12 + 0.68 * (1 - Math.max(0, Math.min(1, distanceFromHead)));
+}
+
 export function barbParts(speed: number): { flags: number; full: number; half: number } {
   const knots = Math.max(0, Math.min(500, Math.round(speed * KNOTS_PER_MS / 5) * 5));
   return { flags: Math.floor(knots / 50), full: Math.floor(knots % 50 / 10), half: knots % 10 >= 5 ? 1 : 0 };

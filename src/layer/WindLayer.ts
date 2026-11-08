@@ -15,12 +15,14 @@ import type { ProjectionLike } from 'ol/proj.js';
 import { bracketTime, interpolateFields, KNOTS_PER_MS, sampleField } from '../core/sampling.js';
 import type { Extent, Forecast, TimeBracket, WindField, WindForecastProvider, WindSample } from '../core/types.js';
 import { barbCanvas, jet } from '../render/wind.js';
+import { WindParticleLayer } from './WindParticleLayer.js';
 
 export interface WindLayerOptions {
   provider: WindForecastProvider;
   time?: Date;
   texture?: boolean;
   barbs?: boolean;
+  particles?: boolean;
   opacity?: number;
   maximumKnots?: number;
   barbSpacing?: number;
@@ -36,6 +38,7 @@ export interface WindLayerState {
 
 export class WindLayer extends LayerGroup {
   readonly textureLayer: ImageLayer<ImageCanvasSource>;
+  readonly particlesLayer: WindParticleLayer;
   readonly barbsLayer: VectorLayer<VectorSource<Feature<Point>>>;
   private provider: WindForecastProvider;
   private time: number;
@@ -54,10 +57,13 @@ export class WindLayer extends LayerGroup {
 
   constructor(options: WindLayerOptions) {
     const textureLayer = new ImageLayer({ source: new ImageCanvasSource({}), visible: options.texture ?? true, opacity: options.opacity ?? 0.65 });
+    const particlesLayer = new WindParticleLayer({ visible: options.particles ?? true });
     const barbsLayer = new VectorLayer({ source: new VectorSource<Feature<Point>>(), visible: options.barbs ?? true });
-    super({ layers: [textureLayer, barbsLayer] });
+    super({ layers: [textureLayer, particlesLayer, barbsLayer] });
     this.textureLayer = textureLayer;
+    this.particlesLayer = particlesLayer;
     this.barbsLayer = barbsLayer;
+    this.on('change:visible', () => this.particlesLayer.setActive(Boolean(this.map && this.getVisible())));
     this.provider = options.provider;
     this.time = options.time?.getTime() ?? Date.now();
     this.maximum = options.maximumKnots ?? 60;
@@ -73,6 +79,7 @@ export class WindLayer extends LayerGroup {
     const projection = map.getView().getProjection().getCode();
     if (projection !== 'EPSG:3857' && projection !== 'EPSG:4326') throw new Error('WindLayer supports EPSG:3857 and EPSG:4326 views');
     this.map = map;
+    this.particlesLayer.setActive(this.getVisible());
     this.addedToMap = !map.getLayers().getArray().includes(this);
     if (this.addedToMap) map.addLayer(this);
     this.configureTexture();
@@ -92,6 +99,7 @@ export class WindLayer extends LayerGroup {
     if (this.map && this.addedToMap) this.map.removeLayer(this);
     this.map = undefined;
     this.addedToMap = false;
+    this.particlesLayer.setActive(false);
     this.clearField();
     this.publish({ status: 'idle', time: this.time, forecast: this.forecast });
   }
@@ -101,6 +109,7 @@ export class WindLayer extends LayerGroup {
     this.subscribers.clear();
     this.iconCache.clear();
     this.textureLayer.dispose();
+    this.particlesLayer.dispose();
     this.barbsLayer.dispose();
     super.disposeInternal();
   }
@@ -154,6 +163,7 @@ export class WindLayer extends LayerGroup {
 
   private clearField(): void {
     this.field = undefined;
+    this.particlesLayer.setField(undefined);
     this.textureLayer.getSource()?.changed();
     this.barbsLayer.getSource()?.clear();
   }
@@ -192,6 +202,7 @@ export class WindLayer extends LayerGroup {
       if (before.time !== bracket.before || after.time !== bracket.after || before.forecast.id !== forecast.id ||
         before.forecast.model !== forecast.model || before.forecast.runTime !== forecast.runTime) throw new Error('Provider returned the wrong forecast frame');
       this.field = interpolateFields(before, after, time);
+      this.particlesLayer.setField(this.field);
       this.textureLayer.getSource()?.setAttributions(forecast.attribution);
       this.textureLayer.getSource()?.changed();
       this.updateBarbs();

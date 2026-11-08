@@ -40,6 +40,7 @@ const wind = new WindLayer({
   provider: new OfficialGribProvider(),
   time: new Date(),
   texture: true,
+  particles: true,
   barbs: true,
   opacity: 0.65,
   maximumKnots: 60,
@@ -122,6 +123,8 @@ Vector interpolation smooths the display; it does not simulate a new forecast. O
 Components use the convention U positive eastward and V positive northward. The texture uses a fixed jet scale from 0 to 60 knots, saturated at the limits. Wind barbs round to the nearest 5 knots, with flags at 50 knots. Their size remains constant on screen.
 
 ## Rendering and Limitations
+
+The optional particle layer is enabled by default. Each particle leaves a fading trail capped at 25 CSS pixels and expires after four simulated seconds, regardless of distance travelled. Initial particle ages are staggered randomly by up to one second to avoid synchronized respawns. On expiry, a particle and its trail disappear and a new particle spawns at a random viewport position. The 4 px head is the trail endpoint, not a circle. Trail direction and relative speed follow the wind vector. Motion is visually time-scaled to remain visible across zoom levels; it is not a literal elapsed-time simulation. Toggle it with `wind.particlesLayer.setVisible(false)`.
 
 Each texture pixel is transformed from the map projection to EPSG:4326; a latitude/longitude image is not simply stretched over Mercator. EPSG:3857 and EPSG:4326 views, world copies, and the antimeridian are supported.
 

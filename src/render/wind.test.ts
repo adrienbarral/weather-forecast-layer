@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { barbParts, jet } from './wind';
+import { barbParts, jet, trailOpacity } from './wind';
 import { KNOTS_PER_MS } from '../core/sampling';
 
 it('uses stable classical jet reference colors and saturation', () => {
@@ -13,4 +13,7 @@ it('uses conventional 5, 10 and 50 knot barbs', () => {
   expect(barbParts(0)).toEqual({ flags: 0, full: 0, half: 0 });
   expect(barbParts(5 / KNOTS_PER_MS)).toEqual({ flags: 0, full: 0, half: 1 });
   expect(barbParts(65 / KNOTS_PER_MS)).toEqual({ flags: 1, full: 1, half: 1 });
+});
+it('fades from a bright trail head to a dim tail', () => {
+  expect(trailOpacity(0)).toBeGreaterThan(trailOpacity(1));
 });

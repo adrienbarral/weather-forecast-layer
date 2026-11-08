@@ -162,6 +162,7 @@ next.addEventListener('click', () => {
 });
 refresh.addEventListener('click', () => { void wind.reloadForecast().catch(report); });
 element<HTMLInputElement>('texture').addEventListener('change', event => wind.textureLayer.setVisible((event.target as HTMLInputElement).checked));
+element<HTMLInputElement>('particles').addEventListener('change', event => wind.particlesLayer.setVisible((event.target as HTMLInputElement).checked));
 element<HTMLInputElement>('barbs').addEventListener('change', event => wind.barbsLayer.setVisible((event.target as HTMLInputElement).checked));
 element<HTMLInputElement>('opacity').addEventListener('input', event => {
   const opacity = Number((event.target as HTMLInputElement).value);

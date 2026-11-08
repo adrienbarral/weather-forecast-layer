@@ -17,6 +17,48 @@ async function renderedPixels(page: Page): Promise<number> {
   });
 }
 
+async function mapFrameSignature(page: Page): Promise<number> {
+  return page.evaluate(() => {
+    const canvas = Array.from(document.querySelectorAll<HTMLCanvasElement>('#map .ol-layer canvas')).sort((a, b) => b.width * b.height - a.width * a.height)[0];
+    if (!canvas) return 0;
+    const pixels = canvas.getContext('2d')!.getImageData(0, 0, canvas.width, canvas.height).data;
+    let hash = 2166136261;
+    for (let index = 0; index < pixels.length; index += 4) hash = Math.imul(hash ^ pixels[index] ^ pixels[index + 1] << 8 ^ pixels[index + 2] << 16 ^ pixels[index + 3] << 24, 16777619);
+    return hash >>> 0;
+  });
+}
+
+async function particleCanvasStats(page: Page): Promise<{ revision: number; alpha: number; signature: number }> {
+  return page.evaluate(async () => {
+    const path = document.querySelector<HTMLScriptElement>('script[src*="/main.ts"]')!.src;
+    const { map, wind } = await import(path);
+    const view = map.getView();
+    const source = wind.particlesLayer.getSource();
+    const image = source!.getImage(view.calculateExtent(map.getSize()), view.getResolution(), devicePixelRatio, view.getProjection()) as unknown as { getImage(): HTMLCanvasElement };
+    const canvas = image.getImage();
+    const data = canvas.getContext('2d')!.getImageData(0, 0, canvas.width, canvas.height).data;
+    let alpha = 0;
+    let signature = 2166136261;
+    for (let index = 0; index < data.length; index += 4) {
+      if (data[index + 3] > 0) alpha++;
+      signature = Math.imul(signature ^ data[index] ^ data[index + 1] << 8 ^ data[index + 2] << 16 ^ data[index + 3] << 24, 16777619);
+    }
+    return { revision: source!.getRevision(), alpha, signature: signature >>> 0 };
+  });
+}
+
+async function particleTrailStats(page: Page): Promise<{ count: number; maxPixels: number; ageSpread: number }> {
+  return page.evaluate(async () => {
+    const path = document.querySelector<HTMLScriptElement>('script[src*="/main.ts"]')!.src;
+    const { wind } = await import(path);
+    const particles = wind.particlesLayer.particles as { trailLength: number; ageSeconds: number }[];
+    const ages = particles.map(particle => particle.ageSeconds);
+    return { count: particles.filter(particle => particle.trailLength > 0).length,
+      maxPixels: Math.max(0, ...particles.map(particle => particle.trailLength / devicePixelRatio)),
+      ageSpread: Math.max(...ages) - Math.min(...ages) };
+  });
+}
+
 async function mockGrib(page: Page): Promise<void> {
   await page.route('**/fonts.googleapis.com/**', route => route.abort());
   await page.route('**/tile.openstreetmap.org/**', route => route.fulfill({ contentType: 'image/png', body: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl6VQAAAABJRU5ErkJggg==', 'base64') }));
@@ -55,6 +97,65 @@ test('NOAA GRIB layer, temporal interpolation and controls', async ({ page }, te
   await expect(page.locator('#map-status')).toHaveAttribute('data-status', 'ready');
   await expect(page.locator('#forecast-status')).toHaveText('Prévision interpolée');
   await expect.poll(() => renderedPixels(page)).toBeGreaterThan(100);
+  const firstFrame = await particleCanvasStats(page);
+  await page.waitForTimeout(250);
+  const nextFrame = await particleCanvasStats(page);
+  const trails = await particleTrailStats(page);
+  expect(nextFrame.revision).toBeGreaterThan(firstFrame.revision);
+  expect(nextFrame.alpha).toBeGreaterThan(0);
+  expect(nextFrame.signature).not.toBe(firstFrame.signature);
+  expect(trails.count).toBeGreaterThan(0);
+  expect(trails.maxPixels).toBeLessThanOrEqual(50.01);
+  expect(trails.ageSpread).toBeGreaterThan(0.5);
+  const trackedParticle = await page.evaluate(async () => {
+    const path = document.querySelector<HTMLScriptElement>('script[src*="/main.ts"]')!.src;
+    const { map, wind } = await import(path);
+    const [width, height] = map.getSize();
+    const particles = wind.particlesLayer.particles as { position?: [number, number]; generation: number }[];
+    let selected = -1;
+    let clearance = -1;
+    particles.forEach((particle, index) => {
+      if (!particle.position) return;
+      const currentClearance = Math.min(particle.position[0], particle.position[1], width - particle.position[0], height - particle.position[1]);
+      if (currentClearance > clearance) { clearance = currentClearance; selected = index; }
+    });
+    return { selected, generation: selected < 0 ? -1 : particles[selected].generation };
+  });
+  expect(trackedParticle.selected).toBeGreaterThanOrEqual(0);
+  await page.waitForTimeout(2_200);
+  const beforeLifetime = await page.evaluate(async index => {
+    const path = document.querySelector<HTMLScriptElement>('script[src*="/main.ts"]')!.src;
+    return (await import(path)).wind.particlesLayer.particles[index].generation;
+  }, trackedParticle.selected);
+  expect(beforeLifetime).toBe(trackedParticle.generation);
+  await expect.poll(async () => page.evaluate(async index => {
+    const path = document.querySelector<HTMLScriptElement>('script[src*="/main.ts"]')!.src;
+    return (await import(path)).wind.particlesLayer.particles[index].generation;
+  }, trackedParticle.selected), { timeout: 3_000 }).toBeGreaterThan(trackedParticle.generation);
+  await expect.poll(async () => page.evaluate(async () => {
+    const path = document.querySelector<HTMLScriptElement>('script[src*="/main.ts"]')!.src;
+    const { wind } = await import(path);
+    return Math.max(...wind.particlesLayer.particles.map((particle: { generation: number }) => particle.generation));
+  }), { timeout: 5_000 }).toBeGreaterThan(0);
+  await page.evaluate(async () => {
+    const path = document.querySelector<HTMLScriptElement>('script[src*="/main.ts"]')!.src;
+    const { map } = await import(path);
+    map.getView().setZoom(map.getView().getZoom()! + 1);
+  });
+  await expect(page.locator('#map-status')).toHaveAttribute('data-status', 'ready');
+  await expect.poll(async () => (await particleCanvasStats(page)).alpha, { timeout: 3_000 }).toBeGreaterThan(0);
+  const zoomedFrame = await particleCanvasStats(page);
+  expect(zoomedFrame.alpha).toBeGreaterThan(0);
+  expect(zoomedFrame.signature).not.toBe(nextFrame.signature);
+  await page.locator('#particles').uncheck();
+  expect(await page.evaluate(async () => {
+    const path = document.querySelector<HTMLScriptElement>('script[src*="/main.ts"]')!.src;
+    return (await import(path)).wind.particlesLayer.getVisible();
+  })).toBe(false);
+  await page.locator('#particles').check();
+  await page.locator('#particles').uncheck();
+  await expect(page.locator('#particles')).not.toBeChecked();
+  await page.locator('#particles').check();
   const sample = await page.evaluate(async () => {
     const path = document.querySelector<HTMLScriptElement>('script[src*="/main.ts"]')!.src;
     return (await import(path)).wind.sample(-4, 48);
