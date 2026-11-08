@@ -16,6 +16,10 @@ npm run dev
 
 Open http://127.0.0.1:5173. The demo automatically selects the latest complete GFS cycle and requests wind messages for the visible map area.
 
+## GitHub Pages
+
+The GitHub Actions workflow deploys the demo from `main` to https://adrienbarral.github.io/weather-forecast-layer/. In the repository settings, set **Pages → Build and deployment → Source** to **GitHub Actions**. Each push to `main` publishes a new demo; the workflow can also be started manually.
+
 Downloads use HTTP Range requests: two U/V messages per forecast time, and only the native forecast times needed. GFS provides hourly steps for the first 72 hours. The texture and wind barbs use the same interpolated field.
 
 ## Usage
